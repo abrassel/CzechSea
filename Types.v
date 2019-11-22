@@ -1,33 +1,48 @@
-Require Import List.
-Import ListNotations.
-Require Import String.
-Require Import Maps.
+Require Import CContext.
 
-Definition generalized (A: Type) := list A.
+(* We are going to take advantage of extensive syntactical sugaring in C to develop a set of core types which all other types can be derived from.
 
-Definition stack := generalized nat.
+  Using this, we hope to significantly reduce the footprint of our proofs.  We define below a core set of types which all other types can be interpreted as syntactical sugar of.
+ **)
 
-Definition push (x: nat) (xl: stack): stack :=
-  x::xl.
+(*
+  Our principle goal with our typing system is to provide
+  flexibility for future extensions.  
 
-Definition pop (xl: stack): option (nat*(stack)) :=
-  match xl with
-  | [] => None
-  | h::t => Some (h,t)
+  Some notes: we define a pointer based on its underlying reference
+  We define a struct based on the subfields it contains 
+**)
+Inductive CCore_Type :=
+| void
+| number
+| pointer_singleton (ref: CCore_Type)
+| pointer_multi (len: nat) (ref: CCore_Type)
+| struct (fields: list CCore_Type).
+
+Inductive CType :=
+| unsigned_int
+| int
+| signed_char
+| char
+| short
+| unsigned_short
+| long_min
+| long_max
+| array (len: nat) (ref: CType)
+| bool.
+
+(* TODO: Add integer width **)
+Fixpoint reduce_type_sugaring (t: CType): CCore_Type :=
+  match t with
+  | unsigned_int => number
+  | int => number
+  | signed_char => number
+  | char => number
+  | short => number
+  | unsigned_short => number
+  | long_min => number
+  | long_max => number
+  | array len ref => pointer_multi len (reduce_type_sugaring ref)
+  | bool => number
   end.
 
-Definition heap := generalized nat.
-
-(* We want a way to look up values in the stack and heap *)
-Definition symbol_table := total_map nat.  (* make sure to initialize with error default value *)
-
-Definition context := (stack)*(heap)*(symbol_table).
-
-Definition st := total_map nat.
-
-Definition test A := list (nat * A).
-
-Check (test nat).
-
-Definition sample_context : context :=
-  ([1], [1], t_empty 1).
