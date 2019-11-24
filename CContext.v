@@ -32,5 +32,3 @@ Definition pop {A: Type} (xl: stack A): option (A*stack A) :=
   | h::t => Some (h,t)
   end.
 
-Notation "l '[' n ']'" := (nth n l 0) (at level 90, left associativity).
-
