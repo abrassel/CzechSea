@@ -18,8 +18,11 @@ Definition sym_tbl := total_map nat.  (* make sure to initialize with error defa
 (* C programs will be manipulating stack, heap, and symbol table 
  
  Important: in prep for scoping, stack of sym_tbls
-*)
-Definition space := (stack nat, sym_tbl, heap, stack sym_tbl).
+ *)
+
+(* TODO - must fix **)
+Inductive context :=
+| space (s: stack nat) (st: sym_tbl) (h: heap) (ht: sym_tbl).
 
 (* Some useful properties of our stack, heap, symbol table, and context **)
 
@@ -31,4 +34,17 @@ Definition pop {A: Type} (xl: stack A): option (A*stack A) :=
   | [] => None
   | h::t => Some (h,t)
   end.
+
+Definition lookup_s (ctx: context) (var: string) :=
+  let '(space s st _ _) := ctx in
+  let result := st var in
+  nth result s 0.
+
+Definition lookup_h (ctx: context) (var: string) :=
+  let '(space _ _ h ht) := ctx in
+  let result := ht var in
+  nth result h 0.
+
+Definition lookup (ctx: context) (var: string) :=
+  lookup_s ctx var \/ lookup_h ctx var.
 
