@@ -74,21 +74,21 @@ Definition pop_frame (s: cstack) (st: stack sym_tbl) :=
 
 Fixpoint search_sm (st: stack sym_tbl) (var: string) :=
   match st with
-  | [] => 0 (* guaranteed lookup success **)
+  | [] => None 
   | h::t => match h var with
             | None => search_sm t var
-            | Some n => n
+            | Some n => Some n
             end
   end.
 
 Fixpoint frame_nth (s: cstack) (offset: nat) :=
   match s with
-  | [] => 0 (* Not going to happen **)
+  | [] => None (* Not going to happen **)
   | h::t => (fix frame_aux l n :=
                match l, n with
                | h'::t', S n => frame_aux t' n
                | [], _ => frame_nth t n
-               | h'::t', 0 => h'
+               | h'::t', 0 => Some h'
                end
             ) h offset
   end.
@@ -96,18 +96,45 @@ Fixpoint frame_nth (s: cstack) (offset: nat) :=
 (*Use this to lookup a variable (scope shadowing applies **)
 (*Not efficient.  but it does the job **)
 Definition lookup_s (s: cstack) (st: stack sym_tbl) (var: string) :=
-  let index := search_sm st var in
-  let offset := index - S (get_pred s) in
-  frame_nth s offset. (* guaranteed lookup success here too **)
+  match search_sm st var with
+  | None => None
+  | Some index => 
+    let offset := index - S (get_pred s) in
+    frame_nth s offset
+  end.
 
 Definition lookup_h (h: cheap) (ht: sym_tbl) (var: string) :=
   match ht var with
-  | Some index => nth index h 0
-  | None => 0 (* guaranteed lookup success **)
-  end.
+  | Some index => Some (nth index h 0)
+  | None => None
+  end. 
+
+Definition addr_s (st: stack sym_tbl) (var: string) :=
+  search_sm st var.
+
+Definition addr_h (ht: sym_tbl) (var: string) :=
+  ht var.
+
+Definition get_val_s (s: cstack) (addr: nat): option nat :=
+  let offset := addr - S (get_pred s) in
+  frame_nth s offset.
+
+Definition get_val_h (h: cheap) (addr: nat): option nat :=
+  nth_error h addr.
+
+Definition filter_s ctx :=
+  let '(space s st _ _) := ctx in
+  (s, st).
+
+Definition filter_h ctx :=
+  let '(space _ _ h ht) := ctx in
+  (h, ht).
+
+Definition query_struct_space (ctx: context) (s_name s_var: string) :=
+  Some s_var. (* TODO **)
 
 (* Now some useful lemmas **)
-                                                            
+                                                           
 (* Lemma saying that we add to stack properly -decrement by 1 eac time**)
 Lemma add_stack_properly: forall (s s': cstack) (st st': stack sym_tbl) (var: string) (val: nat),
     s <> [] /\ st <> [] ->
@@ -164,7 +191,7 @@ Lemma add_stack_vars: forall (s s': cstack) (st st': stack sym_tbl)
     s <> [] /\ st <> [] ->
     get_pred s <> 0 ->
     push_var s st var val = (s', st') ->
-    lookup_s s' st' var = val.
+    lookup_s s' st' var = Some val.
 Proof.
   intros.
   assert (get_pred s' = pred (get_pred s)).
@@ -229,9 +256,9 @@ Fixpoint shadowed (st: stack sym_tbl) (st': stack sym_tbl) v :=
 Theorem lookup_works: forall (s s': cstack) (st st': stack sym_tbl) (v: string) (val: nat),
     s' <> [] /\ st' <> [] ->
     get_pred s' <> 0 ->
-    lookup_s s st v = val ->
+    lookup_s s st v = Some val ->
     cstack_seq s st s' st' ->
-    lookup_s s' st' v = val \/ shadowed st st' v. 
+    lookup_s s' st' v = Some val \/ shadowed st st' v. 
 Proof.
 Admitted.
   
@@ -240,9 +267,9 @@ Admitted.
 Theorem removal_works: forall (s s': cstack) (st st': stack sym_tbl) (v: string) (val: nat) f ft,
     s <> [] /\ st <> [] ->
     get_pred s <> 0 ->
-    lookup_s s st v = val ->
+    lookup_s s st v = Some val ->
     pop_frame s st = (f, s', ft, st') ->
-    lookup_s s st v = val \/ lookup_s [f] [ft] v = val.
+    lookup_s s st v = Some val \/ lookup_s [f] [ft] v = Some val.
 Proof.
 Admitted.
 
