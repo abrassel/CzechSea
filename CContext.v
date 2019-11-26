@@ -23,29 +23,22 @@ Definition sym_tbl := partial_map nat.  (* make sure to initialize with error de
  Important: in prep for scoping, stack of sym_tbls
  *)
 
-(* TODO - must fix **)
-Inductive context :=
-| space (s: cstack) (st: stack sym_tbl) (h: cheap) (ht: sym_tbl).
-
 (* Some useful properties of our stack, heap, symbol table, and context **)
-
-(* Helpful to do global lookups across stacks **)
-Definition flatten {A: Type} (l: list (list A)): list A :=
-  fold_left (fun la la' => la ++ la') l [].
-
 
 Definition push {A: Type} (xl: stack A) (x: A): stack A :=
   x::xl.
 
-Definition pop {A: Type} (xl: stack A) (d: A):=
+Hint Unfold push.
+
+Definition pop {A: Type} (xl: stack A): option (stack A) :=
   match xl with
-  | [] => (d, [])
-  | h::t => (h,t)
+  | [] => None
+  | _::t => Some t
   end.
 
 Fixpoint get_pred (s: cstack) :=
   match s with
-  | [] => 100 (* num allowed variables **)
+  | [] => 99 (* num allowed variables **)
   | h::t => (get_pred t) - (List.length h)
   end.
 
@@ -55,22 +48,35 @@ Definition push_new_frame (s: cstack) (st: stack sym_tbl) :=
   let st' := push st (empty) in
   (s', st').
 
+Hint Unfold push_new_frame.
+
 (*Use this to create new variables on the stack *)
 Definition push_var (s: cstack) (st: stack sym_tbl) (var: string) (v: nat) :=
   match s, st with
   | shead::stail, sthead::sttail =>
     let next_val := get_pred s in
     let s' := (push shead v)::stail in
-    let st' := (var !-> Some next_val; sthead)::sttail in
+    let st' := (var |-> next_val; sthead)::sttail in
     (s', st')
   | _, _ => ([], []) (* error case -> always have stack frames **)
-  end.          
+  end.
+
+Hint Unfold push_var.
 
 (*Use this to return from a scope **)
 Definition pop_frame (s: cstack) (st: stack sym_tbl) :=
-  let '(f, s') := pop s [] in
-  let '(ft, st') := pop st (empty) in
-  (f, s', ft, st').
+  match (pop s),(pop st) with
+  | Some s', Some st' => (s', st')
+  | _, _ => ([], [])
+  end.
+
+Hint Unfold pop_frame.
+
+Fixpoint search_frame (st: stack sym_tbl) (var: string) :=
+  match st with
+  | [] => None
+  | h::_ => h var
+  end.
 
 Fixpoint search_sm (st: stack sym_tbl) (var: string) :=
   match st with
@@ -80,6 +86,8 @@ Fixpoint search_sm (st: stack sym_tbl) (var: string) :=
             | Some n => Some n
             end
   end.
+
+Hint Unfold search_sm.
 
 Fixpoint frame_nth (s: cstack) (offset: nat) :=
   match s with
@@ -93,68 +101,196 @@ Fixpoint frame_nth (s: cstack) (offset: nat) :=
             ) h offset
   end.
 
+Hint Unfold frame_nth.
+
+Definition offset addr s := addr - S (get_pred s).
+
+Hint Unfold offset.
+
+Definition get_val_s (s: cstack) (addr: nat): option nat :=
+  let off := offset addr s in
+  let fix get_val_s_aux s t :=
+      match s with
+      | [] => None
+      | h::t => match nth_error h off with
+                | None => get_val_s_aux t (off - List.length h)
+                | Some val => Some val
+                end
+      end
+  in get_val_s_aux s off.
+
+Hint Unfold get_val_s.
+
 (*Use this to lookup a variable (scope shadowing applies **)
 (*Not efficient.  but it does the job **)
-Definition lookup_s (s: cstack) (st: stack sym_tbl) (var: string) :=
+Fixpoint lookup_s (s: cstack) (st: stack sym_tbl) (var: string) :=
   match search_sm st var with
   | None => None
-  | Some index => 
-    let offset := index - S (get_pred s) in
-    frame_nth s offset
+  | Some addr => 
+    get_val_s s addr
   end.
+
+Hint Unfold lookup_s.
 
 Definition lookup_h (h: cheap) (ht: sym_tbl) (var: string) :=
   match ht var with
   | Some index => Some (nth index h 0)
   | None => None
-  end. 
+  end.
+
+Hint Unfold lookup_h.
 
 Definition addr_s (st: stack sym_tbl) (var: string) :=
   search_sm st var.
 
+Hint Unfold addr_s.
+
 Definition addr_h (ht: sym_tbl) (var: string) :=
   ht var.
 
-Definition get_val_s (s: cstack) (addr: nat): option nat :=
-  let offset := addr - S (get_pred s) in
-  frame_nth s offset.
+Hint Unfold addr_h.
 
 Definition get_val_h (h: cheap) (addr: nat): option nat :=
   nth_error h addr.
 
-Definition filter_s ctx :=
-  let '(space s st _ _) := ctx in
-  (s, st).
-
-Definition filter_h ctx :=
-  let '(space _ _ h ht) := ctx in
-  (h, ht).
-
-Definition query_struct_space (ctx: context) (s_name s_var: string) :=
-  Some s_var. (* TODO **)
+Hint Unfold get_val_h.
 
 (* Now some useful lemmas **)
-                                                           
+
+Definition valid_state (s: cstack) (st: stack sym_tbl) :=
+  s <> [] /\ st <> [] /\
+  forall var n, search_sm st var = Some n ->
+                               n > get_pred s.
+
+Hint Unfold valid_state.
+
+Definition not_full (s: cstack) :=
+  get_pred s <> 0.
+
+Hint Unfold not_full.
+
 (* Lemma saying that we add to stack properly -decrement by 1 eac time**)
-Lemma add_stack_properly: forall (s s': cstack) (st st': stack sym_tbl) (var: string) (val: nat),
-    s <> [] /\ st <> [] ->
-    get_pred s <> 0 ->
+Lemma S_n_sub_S_m: forall n m,
+    n - m <> 0 ->
+    S (n - S m) = n - m.
+Proof.
+  intros.
+  omega.
+Qed.
+
+Lemma n_sub_s_m_gt: forall n m,
+    n - m <> 0 ->
+    n - m > n - S m.
+Proof.
+  intros.
+  omega.
+Qed.
+
+Lemma offset_stuff:
+  forall n x f s,
+    n > get_pred (f::s) ->
+    not_full (f::s) ->
+    (offset n ((x :: f) :: s)) =
+    S (offset n (f::s)).
+Proof.
+  intros.
+
+   assert (Hpred: (S (get_pred ((x::f)::s)) = get_pred (f::s))). {
+      simpl.
+      apply S_n_sub_S_m. apply H0.
+    }
+
+    unfold offset. rewrite Hpred.
+    symmetry. apply S_n_sub_S_m.
+    unfold offset in H.
+
+    omega.
+Qed.
+
+Lemma lookup_stuff:
+  forall x f s n,
+    n > get_pred (f :: s) ->
+    not_full (f::s) ->
+    get_val_s ((x::f)::s) n =
+    get_val_s (f::s) n.
+Proof.
+Admitted.
+
+Lemma search_sm_diff: forall f st var1 var2 val2,
+    var1 <> var2 ->
+    search_sm ((var2 |-> val2; f)::st) var1 =
+    search_sm (f::st) var1.
+Proof.
+  intros.
+  simpl.
+  rewrite update_neq.
+  reflexivity.
+  auto.
+Qed.
+
+Lemma search_sm_same: forall f st var1 val1 ,
+    search_sm ((var1 |-> val1; f)::st) var1 = Some val1.
+Proof.
+  intros.
+  simpl.
+  rewrite update_eq.
+  reflexivity.
+Qed.
+
+Lemma add_stack_properly_pred: forall (s s': cstack) (st st': stack sym_tbl) (var: string) (val: nat),
+    valid_state s st /\ not_full s ->
+    search_frame st var = None ->
     push_var s st var val = (s', st') ->
     get_pred s' = pred (get_pred s).
 Proof.
   destruct s; intros.
-  inversion H1; subst.
-  destruct H. contradiction.
+  inversion H; inversion H2; contradiction.
 
-  inversion H1; subst.
-  destruct st. destruct H; contradiction.
-
-  inversion H3; subst. clear H3.
+  inversion H0; subst.
+  destruct st. destruct H as [[A1 [A2 A3]] A4].
+  contradiction. clear H0.
+                
+  inversion H1; subst. clear H1.
   unfold push.
-
+  
   unfold get_pred.
+  simpl. omega.
+Qed.
 
-  simpl.  omega.
+Lemma add_stack_properly_invariant: forall (s s': cstack) (st st': stack sym_tbl) (var: string) (val: nat),
+    valid_state s st /\ not_full s ->
+    search_frame st var = None ->
+    push_var s st var val = (s', st') ->
+    valid_state s' st'.
+Proof.
+  intros.
+  destruct H as [[A1 [A2 A3]] A4].
+  destruct s; destruct st; intros; try contradiction.
+
+  inversion H1; subst; clear H1.
+  unfold valid_state.
+  split.
+  intros contra; inversion contra.
+  split. intros contra; inversion contra.
+  intros var2.
+
+  destruct (string_dec var var2).
+  rewrite e.
+  rewrite search_sm_same.
+  intros.
+  inversion H; subst.
+  unfold push, offset.
+  simpl. apply n_sub_s_m_gt.
+  apply A4.
+
+  intros.
+  rewrite search_sm_diff in H.
+  unfold offset.
+  simpl.
+
+  apply A3 in H. simpl in H.
+  omega.
+  auto.
 Qed.
 
 Fixpoint stack_size (s: cstack) :=
@@ -163,119 +299,263 @@ Fixpoint stack_size (s: cstack) :=
   | h::t => (List.length h) + (stack_size t)
   end.
 
-Lemma add_stack_invariant: forall (s: cstack),
-    s <> [] ->
-    List.length s <= 100 ->
-    get_pred s = 100 - stack_size s.
-Proof.
-  induction s; intros.
-  contradiction.
-
-  destruct s.
-  unfold get_pred.
-  unfold stack_size.
-  omega.
-
-  unfold get_pred, stack_size.
-  assert (get_pred (f :: s) = 100 - stack_size (f :: s)).
-  apply IHs. intros contra. inversion contra.
-  simpl. simpl in H0. omega.
-
-  unfold get_pred, stack_size in H1. omega.
-Qed.
-  
-
-(* Second, when you add a variable, you can get the variable **)
-Lemma add_stack_vars: forall (s s': cstack) (st st': stack sym_tbl)
-                                 (var: string) (val: nat),
-    s <> [] /\ st <> [] ->
-    get_pred s <> 0 ->
-    push_var s st var val = (s', st') ->
-    lookup_s s' st' var = Some val.
-Proof.
-  intros.
-  assert (get_pred s' = pred (get_pred s)).
-  apply (add_stack_properly _ _ _ _ _ _ H H0 H1).
-  
-  destruct H.
-
-  (* we know that we cant have empty stack / table **)
-  destruct s; destruct st; try contradiction.
-
-  unfold push_var in H1. inversion H1; subst.
-
-  unfold push. unfold lookup_s.
-  unfold search_sm.
-
-  assert ((var !-> Some (get_pred s - Datatypes.length f); s0) var = Some (get_pred s - Datatypes.length f)).
-  apply update_eq.
-  rewrite H4; clear H4; simpl.
-  inversion H2; subst.
-
-  assert (get_pred s - Datatypes.length f -
-          S (get_pred s - S (Datatypes.length f)) = 0).
-  omega.
-  rewrite H4; clear.
-  reflexivity.
-Qed.
+Hint Unfold stack_size.
 
 (* Define a multi-step relationship **)
-
 Inductive cstack_seq : cstack -> stack sym_tbl -> cstack -> stack sym_tbl -> Prop :=
 | cstack_refl: forall s st,
+    valid_state s st ->
     cstack_seq s st s st
-| cstack_var: forall s s' st st' v val,
+| cstack_var: forall s st s' st' v val,
+    valid_state s st ->
+    search_frame st v = None ->
+    not_full s ->
     push_var s st v val = (s', st') ->
     cstack_seq s st s' st'
-| cstack_frame: forall s s' st st',
+| cstack_frame_empty:
+    cstack_seq [] [] [[]] [empty]
+| cstack_frame: forall s st s' st',
+    valid_state s st ->
     push_new_frame s st = (s', st') ->
     cstack_seq s st s' st'
 | cstack_trans: forall s s' s'' st st' st'',
+    valid_state s st ->
     cstack_seq s st s' st' ->
     cstack_seq s' st' s'' st'' ->
     cstack_seq s st s'' st''.
-
-Theorem backwards_validity_s: forall s s' st st',
-    s' <> [] /\ st' <> [] ->
-    get_pred s' <> 0 ->
+                            
+Theorem forwards_validity_s: forall s s' st st',
     cstack_seq s st s' st' ->
-    s <> [] /\ st <> [] /\ get_pred s <> 0.
-Proof.
-Admitted.
+    valid_state s' st'.
+Proof. 
+  intros.
+  induction H; intros.
+  - assumption.
+  - eapply add_stack_properly_invariant.
+    split; [apply H | apply H1].
+    apply H0.
+    apply H2.
+  - unfold valid_state.
+    split. intros contra; inversion contra.
+    split. intros contra; inversion contra.
+    intros.
+    inversion H.
+  - inversion H0; subst.
+    split. intros contra. inversion contra.
+    split. intros contra. inversion contra.
+    simpl. intros.
+    destruct H as [V1 [V2 V3]].
+    rewrite Nat.sub_0_r. apply V3 in H1. apply H1.
+  - apply IHcstack_seq2.
+Qed.
 
-Fixpoint shadowed (st: stack sym_tbl) (st': stack sym_tbl) v :=
-  match st' with
-  | [] => True (* Can't have new env bigger.  Impossible **)
-  | h::t => st <> st' /\ match h v with
-            | Some _ => True
-            | _ => shadowed st t v
-            end
-  end.
+Lemma search_sm_early_stop:
+  forall ft st v addr,
+    ft v = Some addr ->
+    search_sm (ft::st) v = Some addr.
+Proof.
+  intros.
+  simpl. rewrite H.
+  reflexivity.
+Qed.
+
+Lemma nth_cons: forall {A: Type} (la: list A) (a: A) (x: nat),
+    nth_error (a::la) (S x) = nth_error la x.
+Proof.
+  intros.
+  unfold nth_error.
+  reflexivity.
+Qed.
+
+Lemma insert_non_shadowing:
+  forall s st v1 addr1 f ft f' ft' v2 val2,
+    valid_state (f::s) (ft::st) ->
+    v2 <> v1 ->
+    ft v1 = Some addr1 ->
+    push_var (f::s) (ft::st) v2 val2 = (f'::s, ft'::st) ->
+    search_frame (ft'::st) v1 = Some addr1.
+Proof.
+  intros.
+  inversion H2; subst; clear H2.
+  simpl.
+  rewrite update_neq. apply H1. apply H0.
+Qed.
+
+Definition shadowed st st' v :=
+  search_sm st v <> search_sm st' v. (*deref magic **)
 
 (* Now, lemma showing that this works between frames **)
 Theorem lookup_works: forall (s s': cstack) (st st': stack sym_tbl) (v: string) (val: nat),
-    s' <> [] /\ st' <> [] ->
-    get_pred s' <> 0 ->
+    valid_state s st ->
     lookup_s s st v = Some val ->
     cstack_seq s st s' st' ->
-    lookup_s s' st' v = Some val \/ shadowed st st' v. 
+    lookup_s s' st' v = Some val \/ shadowed st st' v.
 Proof.
-Admitted.
-  
-  
-(* Finally, need some way to guarantee that removing frames doesn't break anything **)
-Theorem removal_works: forall (s s': cstack) (st st': stack sym_tbl) (v: string) (val: nat) f ft,
-    s <> [] /\ st <> [] ->
-    get_pred s <> 0 ->
-    lookup_s s st v = Some val ->
-    pop_frame s st = (f, s', ft, st') ->
-    lookup_s s st v = Some val \/ lookup_s [f] [ft] v = Some val.
-Proof.
+  intros.
+  destruct H as [SH [STH VarH]].
+  induction H1.
+  (* Refl -> we have it by assumption **)
+  - left.
+    assumption.
+
+  - (*Var case.  We have 2 cases.
+    Case 1: in the same stack frame.
+    - Must not be equal so shadowing is impossible.
+    Case 2: in different stack frames.
+    - Can be equal, so shadowing is possible.
+     **)
+
+    destruct s as [| f s]; destruct st as [| ft st]; try contradiction.
+    destruct (search_frame (ft :: st) v) eqn:eq.
+    (* Case 1: we are in the same frame **)
+    left.
+
+    (* assert (stillValid: valid_state s' st'). {
+      eapply add_stack_properly_invariant.
+      split. apply H. apply H2.
+      apply H1.
+      apply H3.
+    }
+    destruct stillValid as [sv1 [sv2 sv3]]. **)
+
+    (* Let's get some info about what s' and st' look like **)
+    inversion H3; subst.
+
+    unfold push.
+
+
+    (* we know that v <> v0.  Let's show it **)
+    destruct (string_dec v v0).
+    rewrite e in eq. congruence.
+
+    unfold lookup_s.
+    rewrite search_sm_diff.
+    unfold search_sm. simpl in eq. rewrite eq.
+    rewrite lookup_stuff.
+    unfold lookup_s in H0.
+    rewrite search_sm_early_stop with (addr:=n) in H0.
+    apply H0.
+    apply eq.
+    apply (VarH v).
+    rewrite search_sm_early_stop with (addr:=n).
+    reflexivity.
+    assumption.
+    assumption.
+    assumption.
+    (* DONE WITH SAME FRAME **)
+    
+
+    (* In this case we have that they are in different frames **)
+    inversion H0.
+    inversion eq.
+    rewrite H6 in H5.
+    destruct (search_sm st v) eqn:addr.
+    2: inversion H5. (* we know that there is a valid lookup **)
+    
+    (* Moreover it's possible for them to be equal now **)
+    destruct (string_dec v v0).
+    (* shadowing case **)
+    right.
+    unfold shadowed.
+    unfold search_sm.
+    rewrite H6.
+    fold search_sm.
+
+    (*Problem here is that v has changed in st' **)
+
+    inversion H3.
+    rewrite addr.
+    rewrite e.
+    rewrite search_sm_same.
+
+    injection; intros.
+
+    simpl in VarH.
+    specialize VarH with (var:=v) (n:=n).
+    rewrite H6 in VarH.
+    apply VarH in addr.
+    omega.
+    (*DONE WITH SHADOWING DIFFERENT STACK FRAME **)
+
+    left.
+    (* No shadowing here -> replacing something entirely different **)
+    rewrite H6.
+    rewrite H5.
+    inversion H3; subst.
+    unfold lookup_s.
+    rewrite search_sm_diff.
+    unfold search_sm.
+    rewrite H6.
+    fold search_sm.
+    rewrite addr.
+    unfold push.
+    rewrite lookup_stuff.
+    assumption.
+    apply (VarH v n).
+    unfold search_sm.
+    rewrite H6.
+    apply addr.
+    assumption.
+    assumption.
+
+    (*DONE WITH NO SHADOWING DIFFERENT STACK FRAME **)
+
+  - (*EMPTY -> FIRST STACK FRAME **)
+    inversion H0.
+  - (* PUSHING NEW FRAME 
+       it's impossible to shadow since we aren't actually adding anything **)
+    left.
+    inversion H1.
+    simpl.
+
+    unfold lookup_s in H0.
+
+    (* How do I deal with this fix? **)
+    admit.
+  - assert (valid_state s' st').
+    apply forwards_validity_s with (s:=s) (st:=st).
+    assumption.
+    destruct H as [SV1 [SV2 SV3]].
+    destruct H1 as [S'V1 [S'V2 S'V3]].
+
+    assert (lookup_s s' st' v = Some val \/ shadowed st st' v).
+    apply (IHcstack_seq1 SV1 SV2 SV3 H0).
+    clear IHcstack_seq1.
+
+    destruct H.
+    (* Case 1 -> No shadowing so far **)
+    assert (lookup_s s'' st'' v = Some val \/ shadowed st' st'' v).
+    apply (IHcstack_seq2 S'V1 S'V2 S'V3 H).
+    clear IHcstack_seq2.
+    destruct H1.
+    (* Case 1.1 -> No shadowing **)
+    left. auto.
+
+    (* Case 1.2 -> Shadowing at pt 2 **)
+    right.
+    intro contra.
+    apply H1.
+    unfold lookup_s in H.
+    admit. (*Bug again **)
+
+    (* Case 2.1 -> Shadowed from the beginning **)
+    right.
+    inversion H1_0; subst.
+    apply H. (* refl case **)
+
+    admit. (* just painstaking **)
+
+    contradiction. (* empty case **)
+    inversion H2; subst. (* new frame case **)
+    unfold push. intro contra.
+    simpl in *.
+    apply H. assumption.
+
+    (* trans case oh god **)
+    admit.
 Admitted.
 
-(* No heap stuff yet **)
-
-  
+    
  
   
   
