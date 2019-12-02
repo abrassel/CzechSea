@@ -6,7 +6,7 @@ Require Import Expressions.
 (** Inductive Type Definitions For Commands **)
 Inductive CCommand : Type :=
 | CCSkip : CCommand
-| CCAssign : id -> CExpression -> CCommand
+| CCAssign : string -> CExpression -> CCommand
 | CCBreak: CCommand
 | CCNext: CCommand -> CCommand -> CCommand
 | CCIf: CExpression -> CCommand -> CCommand-> CCommand
