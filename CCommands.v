@@ -7,6 +7,7 @@ Require Import Expressions.
 Inductive CCommand : Type :=
 | CCSkip : CCommand
 | CCAssign : string -> CExpression -> CCommand
+| CCAssignN : Type->string->CExpression -> CCommand
 | CCBreak: CCommand
 | CCNext: CCommand -> CCommand -> CCommand
 | CCIf: CExpression -> CCommand -> CCommand-> CCommand
@@ -22,6 +23,7 @@ Bind Com_Scope with CCommand.
 (** Added notations for commands **)                                      
 Notation "'CONTINUE'" := CCSkip.
 Notation "X '=' exp" := (CCAssign X exp) (at level 60).
+Notation "type X '=' exp" = (CCAssignN type X exp)(at level 60).
 Notation "'BREAK'" := CCBreak.
 Notation "com1 ; com2":= (CCNext com1 com2) (at level 80, right associativity).
 Notation "'IF(' exp '){' c1 '}ELSE{' c2 '}'" := (CCIf exp c1 c2) (at level 80, right associativity).
@@ -75,15 +77,26 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
      (FOR(exp1;exp2;exp3){ c1}) >> ctx' >>> ctx'' ->
      (** Evaluation Line for expression? **) >> ctx'' >>> ctx'''
      (For(exp1;exp2;exp3){ c1}) >> ctx >>> ctx'''
+
 |CC_Eval_Assign_H_E: forall s st h ht ctx str exp,
     space s st h ht = ctx ->
     lookup_h ht str = Some n->
     (str = exp)>> ctx >>> (*Add value update here *)
-|CC_Eval_Assign_S_EL forall s st h ht ctx str exp,
+
+|CC_Eval_Assign_S_E: forall s st h ht ctx str exp,
     space s st h ht = ctx ->
     lookup_s st str = Some n->
     (str = exp) >> ctx >>>(*Add value update here *)
 
+|CC_Eval_Assign_H_N: forall s st h ht ctx str exp,
+    space s st h ht = ctx ->
+    lookup_h ht str = None ->
+    (type str = exp) >> ctx >>> (*make variable*)
+
+|CC_Eval_Assign_S_N: forall s st h ht ctx str exp,
+    space s st h ht = ctx ->
+    lookup_s st str = None ->
+    (type str - exp) >> ctx >>> (*make variable*)
                 
 where " com '>>' ctx '>>>'  ctx'" := (CC_Eval com ctx ctx').
      
