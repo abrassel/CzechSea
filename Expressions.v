@@ -21,7 +21,7 @@ Inductive CCore_exp :=
 | CPtr: CCore_Value -> CCore_exp
 (* | CStruct: forall xl, struct xl -> string -> CCore_exp.
  how do I do this? **)
-| CStruct: string -> string -> CCore_exp.
+| CStruct: CCore_Value -> string -> string -> CCore_exp.
 
 Inductive C_exp :=
 | C_mod: C_exp -> C_exp -> C_exp (* a % b **)
