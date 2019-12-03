@@ -4,6 +4,9 @@ Require Import String.
 Require Import Maps.
 Require Import Omega.
 
+Definition MAX_HEAP_SIZE := 99.
+Definition MIN_HEAP_SIZE := 50.
+
 Definition stack (A: Type) := list A.
 Definition frame := stack nat.
 Definition cstack := stack (frame).
@@ -38,7 +41,7 @@ Definition pop {A: Type} (xl: stack A): option (stack A) :=
 
 Fixpoint get_pred (s: cstack) :=
   match s with
-  | [] => 99 (* num allowed variables **)
+  | [] => MAX_HEAP_SIZE (* num allowed variables **)
   | h::t => (get_pred t) - (List.length h)
   end.
 
@@ -78,6 +81,8 @@ Fixpoint search_frame (st: stack sym_tbl) (var: string) :=
   | h::_ => h var
   end.
 
+Hint Unfold search_frame.
+
 Fixpoint search_sm (st: stack sym_tbl) (var: string) :=
   match st with
   | [] => None 
@@ -103,7 +108,7 @@ Fixpoint frame_nth (s: cstack) (offset: nat) :=
 
 Hint Unfold frame_nth.
 
-Definition offset addr s := addr - S (get_pred s).
+Definition offset addr s := addr - get_pred s.
 
 Hint Unfold offset.
 
@@ -122,7 +127,6 @@ Definition get_val_s (s: cstack) (addr: nat): option nat :=
 Hint Unfold get_val_s.
 
 (*Use this to lookup a variable (scope shadowing applies **)
-(*Not efficient.  but it does the job **)
 Fixpoint lookup_s (s: cstack) (st: stack sym_tbl) (var: string) :=
   match search_sm st var with
   | None => None
@@ -132,28 +136,10 @@ Fixpoint lookup_s (s: cstack) (st: stack sym_tbl) (var: string) :=
 
 Hint Unfold lookup_s.
 
-Definition lookup_h (h: cheap) (ht: sym_tbl) (var: string) :=
-  match ht var with
-  | Some index => Some (nth index h 0)
-  | None => None
-  end.
-
-Hint Unfold lookup_h.
-
 Definition addr_s (st: stack sym_tbl) (var: string) :=
   search_sm st var.
 
 Hint Unfold addr_s.
-
-Definition addr_h (ht: sym_tbl) (var: string) :=
-  ht var.
-
-Hint Unfold addr_h.
-
-Definition get_val_h (h: cheap) (addr: nat): option nat :=
-  nth_error h addr.
-
-Hint Unfold get_val_h.
 
 (* Now some useful lemmas **)
 
@@ -165,11 +151,10 @@ Definition valid_state (s: cstack) (st: stack sym_tbl) :=
 Hint Unfold valid_state.
 
 Definition not_full (s: cstack) :=
-  get_pred s <> 0.
+  get_pred s > MIN_HEAP_SIZE.
 
 Hint Unfold not_full.
 
-(* Lemma saying that we add to stack properly -decrement by 1 eac time**)
 Lemma S_n_sub_S_m: forall n m,
     n - m <> 0 ->
     S (n - S m) = n - m.
@@ -186,6 +171,11 @@ Proof.
   omega.
 Qed.
 
+Lemma min_heap_inv: forall a, a > MIN_HEAP_SIZE ->
+                              a <> 0.
+  unfold MIN_HEAP_SIZE. intros. omega.
+Qed.
+
 Lemma offset_stuff:
   forall n x f s,
     n > get_pred (f::s) ->
@@ -197,13 +187,12 @@ Proof.
 
    assert (Hpred: (S (get_pred ((x::f)::s)) = get_pred (f::s))). {
       simpl.
-      apply S_n_sub_S_m. apply H0.
+      apply S_n_sub_S_m.
+      unfold not_full in H0.      
+      apply min_heap_inv. simpl in H0. assumption.
     }
 
-    unfold offset. rewrite Hpred.
-    symmetry. apply S_n_sub_S_m.
-    unfold offset in H.
-
+    unfold offset. simpl in *.
     omega.
 Qed.
 
@@ -214,7 +203,10 @@ Lemma lookup_stuff:
     get_val_s ((x::f)::s) n =
     get_val_s (f::s) n.
 Proof.
-Admitted.
+  intros.
+  unfold get_val_s.
+  
+Admitted.  
 
 Lemma search_sm_diff: forall f st var1 var2 val2,
     var1 <> var2 ->
@@ -281,6 +273,7 @@ Proof.
   inversion H; subst.
   unfold push, offset.
   simpl. apply n_sub_s_m_gt.
+  apply min_heap_inv.
   apply A4.
 
   intros.
@@ -387,9 +380,9 @@ Definition shadowed st st' v :=
 (* Now, lemma showing that this works between frames **)
 Theorem lookup_works: forall (s s': cstack) (st st': stack sym_tbl) (v: string) (val: nat),
     valid_state s st ->
-    lookup_s s st v = Some val ->
+    search_sm st v = Some val ->
     cstack_seq s st s' st' ->
-    lookup_s s' st' v = Some val \/ shadowed st st' v.
+    search_sm s' st' v = Some val \/ shadowed st st' v.
 Proof.
   intros.
   destruct H as [SH [STH VarH]].
