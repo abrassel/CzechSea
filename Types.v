@@ -14,9 +14,8 @@ Require Import CContext.
 **)
 Inductive CCore_Type :=
 | void
-| number (width: nat) (signed: bool)
-| pointer (len: nat) (ref: CCore_Type)
-| struct (fields: list CCore_Type).
+| number (signed: bool).
+(* | pointer (ref: CCore_Type). (* no support for arrays yet **) **)
 
 Inductive CType :=
 | unsigned_int
@@ -27,22 +26,23 @@ Inductive CType :=
 | unsigned_short
 | long_unsigned
 | long_signed
-| array (len: nat) (ref: CType)
 | bool.
+(* | array (len: nat) (ref: CType) Later **)
+
 
 (* TODO: Add integer width **)
 Fixpoint reduce_type_sugaring (t: CType): CCore_Type :=
   match t with
-  | unsigned_int => number 4 false
-  | int => number 4 true
-  | signed_char => number 1 true
-  | char => number 1 false
-  | short => number 2 true
-  | unsigned_short => number 2 false
-  | long_unsigned => number 8 false
-  | long_signed => number 8 true
-  | array len ref => pointer len (reduce_type_sugaring ref)
-  | bool => number 1 false
+  | unsigned_int => number false
+  | int => number true
+  | signed_char => number true
+  | char => number false
+  | short => number true
+  | unsigned_short => number false
+  | long_unsigned => number false
+  | long_signed => number true
+  | bool => number false                  
+(*  | array len ref => pointer len (reduce_type_sugaring ref) **)
   end.
   
 

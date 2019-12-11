@@ -1,6 +1,7 @@
 Require Import CUtils.
 Require Import CHeap.
 Require Import CStack.
+Require Import String.
 
 Definition ctx : Type := (cheap * sym_tbl *
                           cstack * stack sym_tbl).
@@ -9,6 +10,9 @@ Definition filter_h (c: ctx): cheap * sym_tbl.
 Admitted.
 
 Definition filter_s (c: ctx): cstack * stack sym_tbl.
+Admitted.
+
+Definition lookup_var (c: ctx) (v: string): option nat.
 Admitted.
 
 Definition valid_state (c: ctx) :=
