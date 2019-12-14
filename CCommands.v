@@ -1,4 +1,3 @@
-Print LoadPath.
 Require Import CContext.
 Require Import Types.
 Require Import Expressions.
@@ -13,7 +12,7 @@ Inductive CCommand : Type :=
 | CCNext: CCommand -> CCommand -> CCommand
 | CCIf: CExpression -> CCommand -> CCommand-> CCommand
 | CCWhile: CExpression -> CCommand -> CCommand
-| CCFor: CExpression-> CExpression->CExpression -> CCommand -> CCommand
+| CCFor: CExpression-> CExpression->CCommand -> CCommand -> CCommand
 (** Not Sure About This Section
 |CCSwitch : CExpression-> CExpression -> CCommand -> CCommand
 
@@ -24,6 +23,13 @@ Bind Com_Scope with CCommand.
 (** Added notations for commands **)                                      
 Notation "'CONTINUE'" := CCSkip.
 Notation "X '=' exp" := (CCAssign X exp) (at level 60).
+
+Notation "X '+=' exp" := (CCAssign X (*X plus expression*)(at level 60).
+Notation "X '-=' exp" := (CCAssign X (*X minus expression*)(at level 60).
+Notation "X '*=' exp" := (CCAssign X (*X times expression*)(at level 60).
+Notation "X '++'" := (CCAssign X (*X plus 1 *)(at level 60).                                                    
+Notation "X '--'" := (CCAssign X (*X minus 1*) (at level 60).                                                    
+
 Notation "type X '=' exp" = (CCAssignN type X exp)(at level 60).
 Notation "'BREAK'" := CCBreak.
 Notation "com1 ; com2":= (CCNext com1 com2) (at level 80, right associativity).
@@ -31,7 +37,7 @@ Notation "'IF(' exp '){' c1 '}ELSE{' c2 '}'" := (CCIf exp c1 c2) (at level 80, r
 Notation "'IF(' exp '){' c1 '}'" := (CCIf exp c1 CCSkip) (at level 80, right associativity).
 Notation "'WHILE(' exp '){' c1 '}'" := (CCWhile exp c1) (at level 80, right associativity).
 Notation ";" := CCSkip.
-Notation "'FOR(' exp1 ';' exp2 ';' exp3 '){' com '}'" := (CCFor exp1 exp2 exp3 com) (at level 80, right associativity).
+Notation "'FOR(' exp1 ';' exp2 ';' c1 '){' com '}'" := (CCFor exp1 exp2 c1 com) (at level 80, right associativity).
 
 
 Open Scope Com_Scope.
@@ -68,16 +74,16 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
     (WHILE(exp1){ c1}) >> ctx' >>> ctx'' ->
     (WHILE(exp1){ c1}) >> ctx >>> ctx'' 
 
-|CC_Eval_For_E: forall ctx exp1 exp2 exp3 c1,
+|CC_Eval_For_E: forall ctx exp1 exp2 com c1,
     E_eval ctx exp2 = CVal 0 ->
-    (FOR(exp1;exp2;exp3){ c1}) >> ctx >>> ctx
+    (FOR(exp1;exp2;com){ c1}) >> ctx >>> ctx
 
-|CC_Eval_For_L: forall ctx ctx' ctx'' ctx''' exp1 exp2 exp3 c1,
+|CC_Eval_For_L: forall ctx ctx' ctx'' ctx''' exp1 exp2 com c1,
      E_eval ctx exp1 = CVal n ->
      c1 >> ctx >>> ctx' ->                  
-     (FOR(exp1;exp2;exp3){ c1}) >> ctx' >>> ctx'' ->
-     (** Evaluation Line for expression? **) >> ctx'' >>> ctx'''
-     (For(exp1;exp2;exp3){ c1}) >> ctx >>> ctx'''
+     (FOR(exp1;exp2;com){ c1}) >> ctx' >>> ctx'' ->
+     com >> ctx'' >>> ctx'''
+     (For(exp1;exp2;com){ c1}) >> ctx >>> ctx'''
 
 |CC_Eval_Assign_H_E: forall s st h ht ctx str exp,
     space s st h ht = ctx ->
@@ -97,7 +103,7 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
 |CC_Eval_Assign_S_N: forall s st h ht ctx str exp,
     space s st h ht = ctx ->
     lookup_s st str = None ->
-    (type str - exp) >> ctx >>> (*make variable*)
+    (type str = exp) >> ctx >>> (*make variable*)
                 
 where " com '>>' ctx '>>>'  ctx'" := (CC_Eval com ctx ctx').
 
