@@ -55,62 +55,70 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
     (c1 ; c2) >> ctx >>> ctx''   
 
 | CC_Eval_If_T: forall ctx ctx' exp1 c1 c2,
-    E_eval ctx exp1 = CVal n ->
+    (*Exp evaluation to non zero*)->
     c1 >> ctx >>> ctx' ->
     (IF(exp1){ c1} ELSE{ c2}) >> ctx >>> ctx'
 
 | CC_Eval_If_F:  forall ctx ctx' exp1 c1 c2,
-    E_eval ctx exp1 = CVal 0 ->
+    (*Exp evaluation to zero*)->
     c2 >> ctx >>> ctx'->
     (IF(exp1){ c1} ELSE{ c2}) >> ctx >>> ctx'
 
 |CC_Eval_While_E: forall ctx exp1 c1,
-    E_eval ctx exp1 = CVal 0 ->
+    (*Exp evaluatio to zero*)->
     (WHILE(exp1){ c1}) >> ctx >>> ctx
 
 |CC_Eval_While_L: forall ctx ctx' ctx'' exp1 c1,
-    E_eval ctx exp1 = CVal 1 ->
+    (*Exp evaluation to non zero*)->
     c1 >> ctx >>> ctx' ->
     (WHILE(exp1){ c1}) >> ctx' >>> ctx'' ->
     (WHILE(exp1){ c1}) >> ctx >>> ctx'' 
 
 |CC_Eval_For_E: forall ctx exp1 exp2 com c1,
-    E_eval ctx exp2 = CVal 0 ->
+    (*Exp evaluation to zero*) ->
     (FOR(exp1;exp2;com){ c1}) >> ctx >>> ctx
 
 |CC_Eval_For_L: forall ctx ctx' ctx'' ctx''' exp1 exp2 com c1,
-     E_eval ctx exp1 = CVal n ->
+     (*Exp evaluation to non zero*) ->
      c1 >> ctx >>> ctx' ->                  
      (FOR(exp1;exp2;com){ c1}) >> ctx' >>> ctx'' ->
      com >> ctx'' >>> ctx'''
      (For(exp1;exp2;com){ c1}) >> ctx >>> ctx'''
 
-|CC_Eval_Assign_H_E: forall s st h ht ctx str exp,
+|CC_Eval_Assign_H_E: forall s st h ht h ht' ctx ctx' str exp,
     space s st h ht = ctx ->
     lookup_h ht str = Some n->
-    (str = exp)>> ctx >>> (*Add value update here *)
+    replace_h h ht str (*Exp evaluation to val*) = (h' * ht') ->
+    space s st h' ht' = ctx'->
+    (str = exp)>> ctx >>> ctx'
 
-|CC_Eval_Assign_S_E: forall s st h ht ctx str exp,
+|CC_Eval_Assign_S_E: forall s st h ht s' st' ctx ctx' str exp,
     space s st h ht = ctx ->
     lookup_s st str = Some n->
-    (str = exp) >> ctx >>>(*Add value update here *)
+    replace_s s st str (*Exp evalution to val*) = (s' * st') ->
+    space s' st' h ht = ctx' ->
+    (str = exp) >> ctx >>> ctx'
 
-|CC_Eval_Assign_H_N: forall s st h ht ctx str exp,
+|CC_Eval_Assign_H_N: forall s st h ht h' ht' ctx ctx' str exp,
     space s st h ht = ctx ->
     lookup_h ht str = None ->
-    (type str = exp) >> ctx >>> (*make variable*)
+    insert_h h ht str (*Exp evaluation to val*) = (h' * ht') ->
+    space s st h' ht' = ctx' ->
+    (type str = exp) >> ctx >>> ctx'
 
-|CC_Eval_Assign_S_N: forall s st h ht ctx str exp,
+|CC_Eval_Assign_S_N: forall s st h ht s' st' ctx ctx' str exp,
     space s st h ht = ctx ->
     lookup_s st str = None ->
-    (type str = exp) >> ctx >>> (*make variable*)
+    insert_s s st str (*Exp evaluation to val*) = (s' * st') ->
+    space s' st' h ht = ctx' ->
+    (type str = exp) >> ctx >>> ctx'
                 
 where " com '>>' ctx '>>>'  ctx'" := (CC_Eval com ctx ctx').
 
-Theorem com_valid_state: forall ctx ctx' com,
+Theorem com_ctx_seq: forall ctx ctx' com,
     valid_state ctx ->
     com >> ctx >>> ctx' ->
-    valid_state ctx'.
+    ctx_seq ctx ctx'
 Proof.
 Admitted.
      
