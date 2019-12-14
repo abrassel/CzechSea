@@ -1,3 +1,4 @@
+Print LoadPath.
 Require Import CContext.
 Require Import Types.
 Require Import Expressions.
@@ -99,4 +100,11 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
     (type str - exp) >> ctx >>> (*make variable*)
                 
 where " com '>>' ctx '>>>'  ctx'" := (CC_Eval com ctx ctx').
+
+Theorem com_valid_state: forall ctx ctx' com,
+    valid_state ctx ->
+    com >> ctx >>> ctx' ->
+    valid_state ctx'.
+Proof.
+Admitted.
      
