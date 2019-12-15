@@ -6,8 +6,9 @@ Require Import Expressions.
 (** Inductive Type Definitions For Commands **)
 Inductive CCommand : Type :=
 | CCSkip : CCommand
+| CCCreate: CType -> string -> CCommand
 | CCAssign : string -> CExpression -> CCommand
-| CCAssignN : Type->string->CExpression -> CCommand
+| CCAssignN : CType->string->CExpression -> CCommand
 | CCBreak: CCommand
 | CCNext: CCommand -> CCommand -> CCommand
 | CCIf: CExpression -> CCommand -> CCommand-> CCommand
@@ -23,6 +24,7 @@ Bind Com_Scope with CCommand.
 
 (** Added notations for commands **)                                      
 Notation "'CONTINUE'" := CCSkip.
+Notation "type X":= (CCCreate type X) (at level 60).
 Notation "X '=' exp" := (CCAssign X exp) (at level 60).
 
 Notation "X '+=' exp" := (CCAssign X (*X plus expression*)(at level 60).
@@ -49,6 +51,16 @@ Reserved Notation " com  '>>' ctx '>>>' ctx' " (at level 40)
 
 (** Evaluation function for commands **)
 Inductive  CC_Eval: CCommand-> context -> context->Prop:=
+| CC_Eval_Create_S: forall str type s st s' st' h ht,
+  lookup_s s st str = None ->
+  (* Type mapping context change*)
+  (* Updated insert *)
+
+| CC_Eval_Create_H: forall str type s st h ht h' ht',
+  lookup_h h ht str = None ->
+  (*Type mapping context change*)
+  (*Updated insert *)
+  
 | CC_Eval_Skip: forall ctx,
     CONTINUE >> ctx >>> ctx
 
@@ -90,21 +102,25 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
 *)
 |CC_Eval_Assign_H_E: forall s st h ht h ht' str exp,
     lookup_h ht str = Some n->
+    (*Check type matching*)
     replace_h h ht str (*Exp evaluation to val*) = (h', ht') ->
     (str = exp)>> space s st h ht >>> space s st h' ht'
 
 |CC_Eval_Assign_S_E: forall s st h ht s' st' str exp,
     lookup_s st str = Some n->
+    (*Check type matching *)
     replace_s s st str (*Exp evalution to val*) = (s', st') ->
     (str = exp) >> space s st h ht >>> space s' st' h ht
 
 |CC_Eval_Assign_H_N: forall s st h ht h' ht' str exp,
     lookup_h ht str = None ->
+    (* Check type matching *)
     insert_h h ht str (*Exp evaluation to val*) = (h', ht') ->
     (type str = exp) >> space s st h ht >>> space s st h' ht'
 
 |CC_Eval_Assign_S_N: forall s st h ht s' st' str exp,
     lookup_s st str = None ->
+    (* Check type matching *)
     insert_s s st str (*Exp evaluation to val*) = (s', st') ->
     (type str = exp) >> space s st h ht >>> space s' st' h ht
                 
