@@ -12,7 +12,8 @@ Inductive CCommand : Type :=
 | CCNext: CCommand -> CCommand -> CCommand
 | CCIf: CExpression -> CCommand -> CCommand-> CCommand
 | CCWhile: CExpression -> CCommand -> CCommand
-| CCFor: CExpression-> CExpression->CCommand -> CCommand -> CCommand
+(* Remove FOR  definition since it's syntatic sugar for while
+| CCFor: CExpression-> CExpression->CCommand -> CCommand -> CCommand *)
 (** Not Sure About This Section
 |CCSwitch : CExpression-> CExpression -> CCommand -> CCommand
 
@@ -27,8 +28,10 @@ Notation "X '=' exp" := (CCAssign X exp) (at level 60).
 Notation "X '+=' exp" := (CCAssign X (*X plus expression*)(at level 60).
 Notation "X '-=' exp" := (CCAssign X (*X minus expression*)(at level 60).
 Notation "X '*=' exp" := (CCAssign X (*X times expression*)(at level 60).
+
+(* Remove the following since they are syntatic sugar 
 Notation "X '++'" := (CCAssign X (*X plus 1 *)(at level 60).                                                    
-Notation "X '--'" := (CCAssign X (*X minus 1*) (at level 60).                                                    
+Notation "X '--'" := (CCAssign X (*X minus 1*) (at level 60). *)                                                    
 
 Notation "type X '=' exp" = (CCAssignN type X exp)(at level 60).
 Notation "'BREAK'" := CCBreak.
@@ -73,7 +76,7 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
     c1 >> ctx >>> ctx' ->
     (WHILE(exp1){ c1}) >> ctx' >>> ctx'' ->
     (WHILE(exp1){ c1}) >> ctx >>> ctx'' 
-
+(* Remove FOR related stuff
 |CC_Eval_For_E: forall ctx exp1 exp2 com c1,
     (*Exp evaluation to zero*) ->
     (FOR(exp1;exp2;com){ c1}) >> ctx >>> ctx
@@ -84,34 +87,26 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
      (FOR(exp1;exp2;com){ c1}) >> ctx' >>> ctx'' ->
      com >> ctx'' >>> ctx'''
      (For(exp1;exp2;com){ c1}) >> ctx >>> ctx'''
-
-|CC_Eval_Assign_H_E: forall s st h ht h ht' ctx ctx' str exp,
-    space s st h ht = ctx ->
+*)
+|CC_Eval_Assign_H_E: forall s st h ht h ht' str exp,
     lookup_h ht str = Some n->
-    replace_h h ht str (*Exp evaluation to val*) = (h' * ht') ->
-    space s st h' ht' = ctx'->
-    (str = exp)>> ctx >>> ctx'
+    replace_h h ht str (*Exp evaluation to val*) = (h', ht') ->
+    (str = exp)>> space s st h ht >>> space s st h' ht'
 
-|CC_Eval_Assign_S_E: forall s st h ht s' st' ctx ctx' str exp,
-    space s st h ht = ctx ->
+|CC_Eval_Assign_S_E: forall s st h ht s' st' str exp,
     lookup_s st str = Some n->
-    replace_s s st str (*Exp evalution to val*) = (s' * st') ->
-    space s' st' h ht = ctx' ->
-    (str = exp) >> ctx >>> ctx'
+    replace_s s st str (*Exp evalution to val*) = (s', st') ->
+    (str = exp) >> space s st h ht >>> space s' st' h ht
 
-|CC_Eval_Assign_H_N: forall s st h ht h' ht' ctx ctx' str exp,
-    space s st h ht = ctx ->
+|CC_Eval_Assign_H_N: forall s st h ht h' ht' str exp,
     lookup_h ht str = None ->
-    insert_h h ht str (*Exp evaluation to val*) = (h' * ht') ->
-    space s st h' ht' = ctx' ->
-    (type str = exp) >> ctx >>> ctx'
+    insert_h h ht str (*Exp evaluation to val*) = (h', ht') ->
+    (type str = exp) >> space s st h ht >>> space s st h' ht'
 
-|CC_Eval_Assign_S_N: forall s st h ht s' st' ctx ctx' str exp,
-    space s st h ht = ctx ->
+|CC_Eval_Assign_S_N: forall s st h ht s' st' str exp,
     lookup_s st str = None ->
-    insert_s s st str (*Exp evaluation to val*) = (s' * st') ->
-    space s' st' h ht = ctx' ->
-    (type str = exp) >> ctx >>> ctx'
+    insert_s s st str (*Exp evaluation to val*) = (s', st') ->
+    (type str = exp) >> space s st h ht >>> space s' st' h ht
                 
 where " com '>>' ctx '>>>'  ctx'" := (CC_Eval com ctx ctx').
 
