@@ -1,7 +1,6 @@
 Require Import CContext.
 Require Import Types.
 Require Import String.
-Require Import Maps.
 
 (* at its core, everything in C can be modeled as a natural **)
 Definition CCore_Value :=
@@ -17,11 +16,8 @@ Inductive CCore_exp :=
 (* | CDiv: CCore_exp -> CCore_exp -> CCore_exp **)
 | CEq: CCore_exp -> CCore_exp -> CCore_exp
 | CLt: CCore_exp -> CCore_exp -> CCore_exp
-| CAnd: CCore_exp -> CCore_exp -> CCore_exp
-| CPtr: CCore_Value -> CCore_exp
-(* | CStruct: forall xl, struct xl -> string -> CCore_exp.
- how do I do this? **)
-| CStruct: string -> string -> CCore_exp.
+| CAnd: CCore_exp -> CCore_exp -> CCore_exp.
+(* | CPtr: CCore_Value -> CCore_exp **)
 
 Inductive C_exp :=
 | C_mod: C_exp -> C_exp -> C_exp (* a % b **)
@@ -33,8 +29,7 @@ Inductive C_exp :=
 | C_le: C_exp -> C_exp -> C_exp (*a <= b **)
 | C_not: C_exp -> C_exp (* !a **)
 | C_or: C_exp -> C_exp -> C_exp (* a || b **)
-| C_deref: CCore_Value -> C_exp -> C_exp (* A[b] **)
-| C_arrow: CCore_Value -> string -> C_exp
+(*| C_deref: CCore_Value -> C_exp -> C_exp (* A[b] **) **)
 | C_tern: C_exp -> C_exp -> C_exp -> C_exp (* a ? b : c **).
 
 Bind Scope Exp_scope with C_exp.
@@ -43,12 +38,6 @@ Delimit Scope Exp_scope with Ccom.
 
 Notation "a '_[_' b '_]'"
   := (C_mod a b) (at level 105, left associativity) : Exp_scope.
-
-Notation "a '_._' b"
-  := (CStruct a b) (at level 105, left associativity) : Exp_scope.
-
-Notation "a '_->_' b"
-  := (C_arrow a b) (at level 105, left associativity) : Exp_scope.
 
 Notation "'+_' a"
   := (C_u_plus a) (at level 80) :  Exp_scope.
@@ -59,8 +48,8 @@ Notation "'-_' a"
 Notation "'!_' a"
   := (C_not a) (at level 80) : Exp_scope.
 
-Notation "'*_' a"
-  := (CPtr a) (at level 80) : Exp_scope.
+(*Notation "'*_' a"
+  := (CPtr a) (at level 80) : Exp_scope. **)
 
 Notation "'&_' a"
   := (CAddr a) (at level 80) : Exp_scope.
@@ -106,7 +95,7 @@ Notation "a _?_ b _:_ c"
 
 Open Scope Exp_scope.
 Reserved Notation " ctx '>>' exp '>>>' exp'" (at level 40).
-Inductive E_eval : context -> CCore_exp -> CCore_exp -> Prop :=
+Inductive E_eval : ctx -> CCore_exp -> CCore_exp -> Prop :=
 | E_Eval_Var_s: forall s st h ht ctx str n,
     space s st h ht = ctx ->
     lookup_s s st str = Some n ->
@@ -183,19 +172,14 @@ Inductive E_eval : context -> CCore_exp -> CCore_exp -> Prop :=
 | E_Eval_And_c_fls: forall ctx n1 n2,
     n1 <> 0 \/ n2 <> 0 ->
     ctx >> ((CVal n1) _&&_ (CVal n2)) >>> CVal 1
-| E_Eval_Ptr_s: forall s st h ht ctx ptr n,
+(*| E_Eval_Ptr_s: forall s st h ht ctx ptr n,
     space s st h ht = ctx ->
     get_val_s s ptr = Some n ->
     ctx >> *_ ptr >>> CVal n
 | E_Eval_Ptr_h: forall s st h ht ctx ptr n,
     space s st h ht = ctx ->
     get_val_h h ptr = Some n ->
-    ctx >> *_ ptr >>> CVal n
-| E_EVal_Struct_s: forall s st h ht ctx s_name s_var var val,
-    query_struct_space ctx s_name s_var = Some var ->
-    space s st h ht = ctx ->
-    lookup_s s st var = Some val ->
-    ctx >> (s_var _._ var) >>> CVal val
+    ctx >> *_ ptr >>> CVal n **)
 
 where " ctx '>>' exp '>>>' exp'" := (E_eval ctx exp exp').
 
