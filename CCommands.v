@@ -53,14 +53,14 @@ Reserved Notation " com  '>>' ctx '>>>' ctx' " (at level 40)
 Inductive  CC_Eval: CCommand-> context -> context->Prop:=
 | CC_Eval_Create_S: forall str type s st s' st' h ht,
   lookup_s s st str = None ->
-  (* Type mapping context change*)
+  (* Type mapping update change*)
   insert_s s st str (*Default val*) = (s', st') ->
   type str >> space s st h ht >>> space s' st' h ht
 
 (* Keeping heap value creation outside for the time being
 | CC_Eval_Create_H: forall str type s st h ht h' ht',
   lookup_h h ht str = None ->
-  (*Type mapping context change*)
+  (*Type mapping update change*)
   insert_h h ht str (*Default val*) = (h', ht') ->
   type str >> space s st h ht >>> space s st h' ht' *)
   
@@ -119,14 +119,14 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
 
 (* Keeping heap variable creation outside for the time being 
 |CC_Eval_Assign_H_N: forall s st h ht h' ht' type str exp,
-    CCreate
-    insert_h h ht str (*Exp evaluation to val*) = (h', ht') ->
-    (type str = exp) >> space s st h ht >>> space s st h' ht' *)
+    (CCreate type str) >> space s st h ht >>> s st h' ht' 
+    replace_h h ht str (*Exp evaluation to val*) = (h'', ht'') ->
+    (type str = exp) >> space s st h ht >>> space s st h'' ht'' *)
 
 |CC_Eval_Assign_S_N: forall s st h ht s' st' type str exp,
-    (CCreate type str) >> s st h ht >>> s' st' h ->
+    (CCreate type str) >> space s st h ht >>> space s' st' h ht->
     (* Check type matching *)
-    insert_s s' st' str (*Exp evaluation to val*) = (s'', st'') ->
+    replace_s s' st' str (*Exp evaluation to val*) = (s'', st'') ->
     (type str = exp) >> space s st h ht >>> space s'' st'' h ht
                 
 where " com '>>' ctx '>>>'  ctx'" := (CC_Eval com ctx ctx').
