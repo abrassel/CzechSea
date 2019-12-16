@@ -54,12 +54,15 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
 | CC_Eval_Create_S: forall str type s st s' st' h ht,
   lookup_s s st str = None ->
   (* Type mapping context change*)
-  (* Updated insert *)
+  insert_s s st str (*Default val*) = (s', st') ->
+  type str >> space s st h ht >>> space s' st' h ht
 
+(* Keeping heap value creation outside for the time being
 | CC_Eval_Create_H: forall str type s st h ht h' ht',
   lookup_h h ht str = None ->
   (*Type mapping context change*)
-  (*Updated insert *)
+  insert_h h ht str (*Default val*) = (h', ht') ->
+  type str >> space s st h ht >>> space s st h' ht' *)
   
 | CC_Eval_Skip: forall ctx,
     CONTINUE >> ctx >>> ctx
@@ -88,6 +91,7 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
     c1 >> ctx >>> ctx' ->
     (WHILE(exp1){ c1}) >> ctx' >>> ctx'' ->
     (WHILE(exp1){ c1}) >> ctx >>> ctx'' 
+
 (* Remove FOR related stuff
 |CC_Eval_For_E: forall ctx exp1 exp2 com c1,
     (*Exp evaluation to zero*) ->
@@ -100,6 +104,7 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
      com >> ctx'' >>> ctx'''
      (For(exp1;exp2;com){ c1}) >> ctx >>> ctx'''
 *)
+
 |CC_Eval_Assign_H_E: forall s st h ht h ht' str exp,
     lookup_h ht str = Some n->
     (*Check type matching*)
@@ -112,17 +117,17 @@ Inductive  CC_Eval: CCommand-> context -> context->Prop:=
     replace_s s st str (*Exp evalution to val*) = (s', st') ->
     (str = exp) >> space s st h ht >>> space s' st' h ht
 
-|CC_Eval_Assign_H_N: forall s st h ht h' ht' str exp,
-    lookup_h ht str = None ->
-    (* Check type matching *)
+(* Keeping heap variable creation outside for the time being 
+|CC_Eval_Assign_H_N: forall s st h ht h' ht' type str exp,
+    CCreate
     insert_h h ht str (*Exp evaluation to val*) = (h', ht') ->
-    (type str = exp) >> space s st h ht >>> space s st h' ht'
+    (type str = exp) >> space s st h ht >>> space s st h' ht' *)
 
-|CC_Eval_Assign_S_N: forall s st h ht s' st' str exp,
-    lookup_s st str = None ->
+|CC_Eval_Assign_S_N: forall s st h ht s' st' type str exp,
+    (CCreate type str) >> s st h ht >>> s' st' h ->
     (* Check type matching *)
-    insert_s s st str (*Exp evaluation to val*) = (s', st') ->
-    (type str = exp) >> space s st h ht >>> space s' st' h ht
+    insert_s s' st' str (*Exp evaluation to val*) = (s'', st'') ->
+    (type str = exp) >> space s st h ht >>> space s'' st'' h ht
                 
 where " com '>>' ctx '>>>'  ctx'" := (CC_Eval com ctx ctx').
 
@@ -132,4 +137,11 @@ Theorem com_ctx_seq: forall ctx ctx' com,
     ctx_seq ctx ctx'
 Proof.
 Admitted.
+
+(*
+Theorem com_type_preservation: forall str type ctx ctx' com,
+        type_check str ctx = type ->
+        com >> ctx >>> ctx' ->
+        type_check str ctx' = type
+*)
      
