@@ -1,7 +1,9 @@
 Require Import PartialMaps.
 Require Import String.
+Open Scope string_scope.
 Require Import List.
 Require Import Omega.
+Require Import FunctionalExtensionality.
 Import ListNotations.
 
 Definition sym_tbl := partial_map string nat.
@@ -57,7 +59,7 @@ Inductive frame_seq:
     frame_seq f ft f' ft'
 | frame_update_addr: forall f ft f' addr newval,
     valid_state_f f ft ->
-    0 <= addr < List.length f ->
+    addr < List.length f ->
     replace_addr f addr newval = f' ->
     frame_seq f ft f' ft
 | frame_trans: forall f ft f' ft' f'' ft'',
@@ -77,35 +79,36 @@ Inductive frame_seq_no_rewrite:
     frame_seq_no_rewrite f ft f' ft' n
 | frame_norewrite_update_addr: forall f ft f' addr newval n,
     valid_state_f f ft ->
-    0 <= addr < List.length f ->
+    addr < List.length f ->
     addr <> n ->
     replace_addr f addr newval = f' ->
     frame_seq_no_rewrite f ft f' ft n
 | frame_norewrite_trans: forall f ft f' ft' f'' ft'' n,
     frame_seq_no_rewrite f ft f' ft' n ->
-    frame_seq_no_rewrite f' ft' f'' ft'' n ->
+    frame_seq_no_rewrite f' ft' f'' ft'' (n + (List.length f' - List.length f)) ->
     frame_seq_no_rewrite f ft f'' ft'' n.
 
 Inductive frame_seq_lift_insert_var:
   frame -> sym_tbl -> frame -> sym_tbl -> string -> Prop :=
-| frame_lift_var_refl: forall (f: frame) (ft: sym_tbl) targetvar,
+| frame_lift_var_refl: forall (f: frame) (ft: sym_tbl) oldvar,
     valid_state_f f ft ->
-    frame_seq_lift_insert_var f ft f ft targetvar
-| frame_lift_insert_var: forall f ft f' ft' val targetvar,
+    frame_seq_lift_insert_var f ft f ft oldvar
+| frame_lift_insert_var: forall f ft f' ft' val targetvar oldvar,
     valid_state_f f ft ->
     ft targetvar = None ->
+    targetvar <> oldvar ->
     insert_var f ft targetvar val = (f', ft')->
-    frame_seq_lift_insert_var f ft f' ft' targetvar
+    frame_seq_lift_insert_var f ft f' ft' oldvar
 | frame_lift_update_addr:
-    forall f ft f' addr newval targetvar,
+    forall f ft f' addr newval oldvar,
     valid_state_f f ft ->
-    0 <= addr < List.length f ->
+    addr < List.length f ->
     replace_addr f addr newval = f' ->
-    frame_seq_lift_insert_var f ft f' ft targetvar
-| frame_lift_trans: forall f ft f' ft' f'' ft'' targetvar,
-    frame_seq_lift_insert_var f ft f' ft' targetvar ->
-    frame_seq_lift_insert_var f' ft' f'' ft'' targetvar ->
-    frame_seq_lift_insert_var f ft f'' ft'' targetvar.
+    frame_seq_lift_insert_var f ft f' ft oldvar
+| frame_lift_trans: forall f ft f' ft' f'' ft'' oldvar,
+    frame_seq_lift_insert_var f ft f' ft' oldvar ->
+    frame_seq_lift_insert_var f' ft' f'' ft'' oldvar ->
+    frame_seq_lift_insert_var f ft f'' ft'' oldvar.
 
 Lemma nth_error_nil: forall A addr,
     @nth_error A [] addr = None.
@@ -128,11 +131,11 @@ Proof.
 Qed.
 
 Lemma replace_addr_lookup_eq: forall f addr newval,
-    0 <= addr < List.length f ->
+    addr < List.length f ->
     lookup_addr (replace_addr f addr newval) addr = Some newval.
 Proof.
   induction f; intros.
-  - simpl in H. inversion H. inversion H1.
+  - simpl in H. inversion H. 
   - simpl in *.
     destruct addr.
     + reflexivity.
@@ -155,8 +158,39 @@ Proof.
     + destruct oldaddr.
       * reflexivity.
       * simpl. apply IHf. omega.
-Qed.  
+Qed.
 
+Lemma force_ft_empty: forall ft,
+    valid_state_f [] ft -> ft = ({}).
+Proof.
+  intros.
+  unfold valid_state_f in H.
+  unfold empty.
+  apply functional_extensionality; intros.
+  destruct (ft x) eqn:eq.
+  - apply H in eq. inversion eq.
+  - reflexivity.
+Qed.
+
+
+Lemma valid_state_f_empty:
+  valid_state_f [] ({}).
+Proof.
+  unfold valid_state_f.
+  intros.
+  inversion H.
+Qed.
+
+
+Lemma non_empty_map: forall a f ft,
+    valid_state_f (a::f) ft ->
+    exists var val ft', ft = (var |-> val; ft').
+Proof.
+  intros.
+  (* Use functional extensionality to destruct empty / nonempty **)
+Admitted.
+
+  
 Theorem lift_insert_imp_frame_seq: forall f ft f' ft' targetvar,
     frame_seq_lift_insert_var f ft f' ft' targetvar ->
     frame_seq f ft f' ft'.
@@ -185,13 +219,6 @@ Proof.
     assumption.
 Qed.
 
-Theorem valid_state_f_empty: valid_state_f [] ({}).
-Proof.
-  unfold valid_state_f.
-  intros.
-  inversion H.
-Qed.
-
 Theorem preservation_valid_state_f: forall
     f ft f' ft',
     frame_seq f ft f' ft' ->
@@ -218,8 +245,9 @@ Proof.
     unfold valid_state_f in H.
     apply (H var _ H1).
   - assumption.
-Qed.  
-
+Qed.   
+    
+    
 Theorem frame_seq_lookup_correct: forall
     f ft f' ft' var addr,
     ft var = Some addr ->
@@ -244,7 +272,7 @@ Theorem frame_seq_no_rewrite_correct: forall
     frame_seq_no_rewrite f ft f' ft' addr ->
     lookup_addr f' (List.length f' - List.length f + addr) = val.
 Proof.
-  intros.
+  intros. 
   induction H0; intros.
   - rewrite Nat.sub_diag.
     simpl. assumption.
@@ -263,7 +291,11 @@ Proof.
 
     rewrite Nat.sub_diag. simpl.
     apply replace_addr_lookup_neq. assumption.
-  - admit.
+  - apply IHframe_seq_no_rewrite1 in H.
+    rewrite plus_comm in H.
+    apply IHframe_seq_no_rewrite2 in H.
+    (* Stuck **)
+    admit.
 Admitted.
     
     

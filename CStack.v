@@ -13,8 +13,12 @@ Definition insert_s (s: cstack) (st: stack sym_tbl)
   (cstack * stack sym_tbl) :=
   match s, st with
   | f::s', ft::st' =>
-    let (f', ft') := (insert_var f ft var val) in
-    (f'::s', ft'::st')
+    match ft var with
+    | None => 
+      let (f', ft') := (insert_var f ft var val) in
+      (f'::s', ft'::st')
+    | Some _ => (s, st)
+    end
   | _, _ => (s, st)
   end.
 
@@ -119,7 +123,13 @@ Inductive cstack_frame_seq_limit_pop:
    to cluster by frame.  (These are wrapper)
 
    The reason why we do this is because the second version is much easier to prove with, but the first version is what we want to use.
-**)
+ **)
+
+Fixpoint stack_size (s: cstack): nat :=
+  match s with
+  | [] => 0
+  | h::t => (List.length h) + (stack_size t)
+  end.
 
 Inductive cstack_seq:
   cstack -> stack sym_tbl -> cstack -> stack sym_tbl -> Prop :=
@@ -145,15 +155,15 @@ Inductive cstack_no_rewrite:
     valid_state_s s st ->
     cstack_no_rewrite s st s st n
 | cstack_no_rewrite_addr: forall f s ft st f' ft' addr,
-    valid_state_s s st ->
+    valid_state_s (f::s) (ft::st) ->
     frame_seq_no_rewrite f ft f' ft' addr ->
     cstack_no_rewrite (f::s) (ft::st) (f'::s) (ft'::st) addr
 | cstack_no_rewrite_frame: forall s st s' st' n,
     cstack_frame_seq s st s' st' ->
     cstack_no_rewrite s st s' st' n
 | cstack_no_rewrite_trans: forall s st s' st' s'' st'' n,
-    cstack_no_rewrite s st s' st' n ->
-    cstack_no_rewrite s' st' s'' st'' n->
+    cstack_no_rewrite s st s' st' (n - (stack_size s' - (stack_size s))) ->
+    cstack_no_rewrite s' st' s'' st'' (n - (stack_size s'' - (stack_size s)))->
     cstack_no_rewrite s st s'' st'' n.
 
 
@@ -165,7 +175,6 @@ Inductive cstack_no_shadowing:
     cstack_no_shadowing s st s st var
 | cstack_no_shadowing_addr: forall f s ft st f' ft' var,
     valid_state_s (f::s) (ft::st) ->
-    get_addr_s st var = None ->
     frame_seq_lift_insert_var f ft f' ft' var ->
     cstack_no_shadowing (f::s) (ft::st) (f'::s) (ft'::st) var
 | cstack_no_shadowing_frame: forall s st s' st' var,
@@ -253,9 +262,34 @@ Inductive cstack_seq_wrapper_no_rewrite:
     pop_frame_s s st = (s', st') ->
     cstack_seq_wrapper_no_rewrite s st s' st' oldaddr
 | cstack_trans_wrapper_no_rewrite: forall s st s' st' s'' st'' oldaddr,
-    cstack_seq_wrapper_no_rewrite s st s' st' oldaddr ->
-    cstack_seq_wrapper_no_rewrite s' st' s'' st'' oldaddr ->
+    cstack_seq_wrapper_no_rewrite s st s' st' (oldaddr - (stack_size s'' - (stack_size s))) ->
+    cstack_seq_wrapper_no_rewrite s' st' s'' st''
+                                  (oldaddr - (stack_size s'' - (stack_size s')))->
     cstack_seq_wrapper_no_rewrite s st s'' st'' oldaddr.
+
+Lemma add_custom_stack_frame:
+  forall s st f ft,
+    valid_state_s s st ->
+    valid_state_f f ft ->
+    cstack_seq s st (f :: s) (ft :: st).
+Proof.
+  intros s st f. induction f; intros.
+  - apply force_ft_empty in H0.
+    rewrite H0.
+    apply cstack_frame.
+    apply cstack_frame_newframe.
+    assumption.
+
+  - admit. (* Use our hypothesis from before **)
+Admitted.
+
+Lemma no_rewrite_add_custom_stack_frame:
+  forall s st f ft nat,
+    valid_state_s s st ->
+    valid_state_f f ft ->
+    cstack_no_rewrite s st (f :: s) (ft :: st) nat.
+Proof.
+Admitted.    
 
 Lemma valid_state_s_len: forall s st,
     valid_state_s s st ->
@@ -270,17 +304,155 @@ Proof.
     + simpl. f_equal. apply IHs. destruct H as [_ H]. assumption.
 Qed.
 
+Theorem valid_state_replace: forall s st addr val,
+    valid_state_s s st ->
+    valid_state_s (replace_addr_s s addr val) st.
+Proof.
+  induction s; intros.
+  - simpl. destruct st.
+    apply I.
+    inversion H.
+  - destruct st. inversion H.
+    destruct H.
+    unfold replace_addr_s.
+    destruct (addr <? List.length a) eqn:eq.
+    + unfold valid_state_s; split.
+      * eapply preservation_valid_state_f.
+        eapply frame_update_addr.
+        apply H.
+        rewrite Nat.ltb_lt in eq. apply eq.
+        reflexivity.
+      * assumption.
+    + fold replace_addr_s. split.
+      assumption.
+      apply IHs. assumption.
+Qed.
+  
+
+Theorem cstack_seq_replace_addr_s: forall s st addr val,
+    valid_state_s s st ->
+    cstack_seq s st (replace_addr_s s addr val) st.
+Proof.
+  intros.
+  generalize dependent st.
+    generalize dependent addr.
+    induction s; intros.
+    + destruct st; try contradiction.
+      simpl.
+      constructor. reflexivity.
+    + unfold valid_state_s in H.
+      destruct st; try contradiction.
+      destruct H as [frame H].
+      fold valid_state_s in H.
+      assert (valid_state_s s st). assumption.
+      
+      unfold replace_addr_s.
+      destruct (addr <? List.length a) eqn:eq.
+      * apply cstack_var.
+        split; assumption.
+        apply Nat.ltb_lt in eq.
+        eapply frame_update_addr;
+          try eassumption;
+          try reflexivity.
+      * fold replace_addr_s.
+        eapply cstack_trans.
+        apply cstack_frame.
+        apply cstack_frame_popframe.
+        split; assumption.
+
+        eapply cstack_trans.
+        apply IHs. assumption.
+
+        apply add_custom_stack_frame.
+        apply valid_state_replace. assumption. assumption.
+Qed.
+
 Theorem limit_pop_imp_frame_seq: forall s st s' st' limited,
     cstack_frame_seq_limit_pop s st s' st' limited ->
     cstack_frame_seq s st s' st'.
-Admitted.
+Proof.
+  intros.
+  induction H; intros.
+  - apply cstack_frame_refl.
+    assumption.
+  - apply cstack_frame_newframe.
+    assumption.
+  - apply cstack_frame_popframe. assumption.
+  - eapply cstack_frame_trans; eassumption.
+Qed.
 
 Theorem cstack_wrapper_imp_cstack: forall s st s' st',
     cstack_seq_wrapper s st s' st' <->
     cstack_seq s st s' st'.
 Proof.
-Admitted.
+  intros.
+  split; intros orig; induction orig; intros.
+  - apply cstack_refl.
+    assumption.
+  - unfold insert_s in H0.
+    unfold valid_state_s in H.
+    destruct s; destruct st; try contradiction.
+    + inversion H0; subst.
+      constructor. reflexivity.
+    + fold valid_state_s in H.
+      destruct (s0 var) eqn:eq.
+      * inversion H0; subst.
+        apply cstack_refl.
+        apply H.
+      * inversion H0; subst.
+        apply cstack_var.
+        apply H.
+        eapply frame_insert.
+        {
+          destruct H as [H _]. apply H.
+        }
+        apply eq.
+        reflexivity.
+  - rewrite <- H0. clear H0.
+    apply cstack_seq_replace_addr_s.
+    assumption.
+  - inversion H0; subst.
+    apply cstack_frame. apply cstack_frame_newframe.
+    assumption.
+  - unfold pop_frame_s in H0.
+    destruct s; destruct st; try contradiction.
+    inversion H0; subst. constructor. reflexivity.
+    inversion H0; subst.
+    apply cstack_frame. apply cstack_frame_popframe.
+    assumption.
+  - eapply cstack_trans; eassumption.
 
+
+
+  - constructor. assumption.
+  - induction H0.
+    + constructor. assumption.
+    + inversion H2; subst.
+      eapply cstack_insert_wrapper.
+      assumption.
+      unfold insert_s.
+      rewrite H1. simpl. reflexivity.
+    + inversion H2; subst; clear H3.
+      eapply cstack_replace_wrapper.
+      assumption.
+      simpl. apply Nat.ltb_lt in H1. rewrite H1.
+      reflexivity.
+    + eapply cstack_trans_wrapper.
+      apply IHframe_seq1. assumption.
+      apply IHframe_seq2.
+      apply preservation_valid_state_f in H0_.
+      destruct H as [_ H].
+      split; assumption.
+  - induction H; intros.
+    + constructor. assumption.
+    + apply cstack_newframe_wrapper.
+      assumption. reflexivity.
+    + apply cstack_popframe_wrapper.
+      assumption. reflexivity.
+    + eapply cstack_trans_wrapper; eassumption.
+  - eapply cstack_trans_wrapper; eassumption.
+Qed.
+ 
 Theorem cstack_no_rewrite_wrapper_imp_no_rewrite: forall s st s' st' addr,
     cstack_seq_wrapper_no_rewrite s st s' st' addr <->
     cstack_no_rewrite s st s' st' addr.
@@ -291,8 +463,36 @@ Theorem cstack_no_shadowing_imp_no_shadowing: forall s st s' st' var,
     cstack_seq_wrapper_no_shadowing s st s' st' var <->
     cstack_no_shadowing s st s' st' var.
 Proof.
-Admitted.
+  intros. split; intros orig; induction orig; intros.
+  - constructor; assumption.
+  - unfold insert_s in H1. destruct s; destruct st; inversion H.
+    inversion H1; subst.
+    constructor; assumption.
 
+    destruct (s0 var) eqn:eq.
+    + inversion H1; subst. constructor; assumption.
+    + inversion H1; subst.
+
+      eapply cstack_no_shadowing_addr. assumption.
+      eapply frame_lift_insert_var; try eassumption.
+      reflexivity.
+  - rewrite <- H0.
+    unfold replace_addr_s.
+    destruct s; destruct st; try contradiction.
+    econstructor; reflexivity.
+    fold replace_addr_s.
+    destruct (addr <? List.length f) eqn:eq.
+    + eapply cstack_no_shadowing_addr. assumption.
+      eapply frame_lift_update_addr. destruct H; assumption.
+      rewrite Nat.ltb_lt in eq. eassumption.
+      reflexivity.
+    + 
+
+      
+      
+      
+      
+      
 Theorem cstack_no_rewrite_imp_cstack: forall s st s' st' addr,
     cstack_no_rewrite s st s' st' addr ->
     cstack_seq s st s' st'.
@@ -301,7 +501,14 @@ Proof.
   induction H; intros.
   - apply cstack_refl. assumption.
   - apply cstack_var.
-    
+    + assumption.
+    + apply no_rewrite_imp_frame_seq with (n:=addr).
+      assumption.
+  - apply cstack_frame.
+    assumption.
+  - eapply cstack_trans.
+    eassumption. assumption.
+Qed.
 
 Theorem cstack_no_shadowing_imp_cstack: forall s st s' st' var,
     cstack_no_shadowing s st s' st' var ->
@@ -396,12 +603,6 @@ Proof.
     apply IHcstack_no_shadowing1.
     assumption.
 Qed.
-
-Fixpoint stack_size (s: cstack): nat :=
-  match s with
-  | [] => 0
-  | h::t => (List.length h) + (stack_size t)
-  end.
 
 Lemma append_frame_size: forall (s: cstack) (f f': frame),
     stack_size (f'::s) - stack_size(f::s) =
